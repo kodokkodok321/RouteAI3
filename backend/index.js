@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
@@ -6,7 +6,6 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-
 app.use(cors());
 app.use(express.json());
 
@@ -15,19 +14,19 @@ const supabase = createClient(
   process.env.SUPABASE_SECRET_KEY
 );
 
-async function geocodeNominatim(address) {
+async function geocode(address) {
   try {
-    const res = await axios.get('https://nominatim.openstreetmap.org/search', {
+    const r = await axios.get('https://nominatim.openstreetmap.org/search', {
       params: { format: 'json', q: address, limit: 1 },
       headers: { 'User-Agent': 'SortirAI/1.0' },
       timeout: 8000
     });
-    if (res.data && res.data.length > 0) {
-      return { lat: parseFloat(res.data[0].lat), lon: parseFloat(res.data[0].lon) };
+    if (r.data && r.data[0]) {
+      return { lat: parseFloat(r.data[0].lat), lon: parseFloat(r.data[0].lon) };
     }
     return null;
-  } catch (err) {
-    console.error('Nominatim error:', err.message);
+  } catch (e) {
+    console.error('geocode error:', e.message);
     return null;
   }
 }
@@ -36,8 +35,10 @@ function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 app.post('/api/sort', async (req, res) => {
@@ -46,21 +47,21 @@ app.post('/api/sort', async (req, res) => {
     if (!addresses || !Array.isArray(addresses) || addresses.length === 0) {
       return res.status(400).json({ error: 'addresses array required' });
     }
-    let originLat = -6.2088;
-    let originLon = 106.8456;
+    let oLat = -6.2088;
+    let oLon = 106.8456;
     if (origin) {
-      const og = await geocodeNominatim(origin);
-      if (og) { originLat = og.lat; originLon = og.lon; }
+      const og = await geocode(origin);
+      if (og) { oLat = og.lat; oLon = og.lon; }
     }
     const results = [];
-    for (const address of addresses) {
-      if (!address || !address.trim()) continue;
-      const geo = await geocodeNominatim(address.trim());
-      if (geo) {
-        const distance = haversine(originLat, originLon, geo.lat, geo.lon);
-        results.push({ address: address.trim(), distance: Math.round(distance * 10) / 10, lat: geo.lat, lon: geo.lon });
+    for (const addr of addresses) {
+      if (!addr || !addr.trim()) continue;
+      const g = await geocode(addr.trim());
+      if (g) {
+        const km = haversine(oLat, oLon, g.lat, g.lon);
+        results.push({ address: addr.trim(), distance: Math.round(km * 10) / 10, lat: g.lat, lon: g.lon });
       } else {
-        results.push({ address: address.trim(), distance: null, error: 'Geocoding failed' });
+        results.push({ address: addr.trim(), distance: null, error: 'Geocoding failed' });
       }
     }
     results.sort((a, b) => {
@@ -69,7 +70,10 @@ app.post('/api/sort', async (req, res) => {
       return a.distance - b.distance;
     });
     try {
-      await supabase.from('sort_history').insert({ addresses: JSON.stringify(addresses), results: JSON.stringify(results) });
+      await supabase.from('sort_history').insert({
+        addresses: JSON.stringify(addresses),
+        results: JSON.stringify(results)
+      });
     } catch (dbErr) {
       console.error('Supabase error:', dbErr.message);
     }
