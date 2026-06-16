@@ -38,7 +38,7 @@ async function geocode(address) {
   return geocodeNominatim(address);
 }
 
-app.post('/sort', async (req, res) => {
+app.post('/api/sort', async (req, res) => {
   const { addresses, refLat, refLng } = req.body;
   if (!addresses || !Array.isArray(addresses) || !addresses.length)
     return res.status(400).json({ error: 'Daftar alamat kosong.' });
@@ -61,5 +61,6 @@ app.post('/sort', async (req, res) => {
   res.json({ results, errors, refPoint: { lat: lat0, lng: lng0 } });
 });
 
-app.get('/health', (_, res) => res.json({ status: 'ok' }));
+app.get('/api/health', (_, res) => res.json({ status: 'ok' }));
 app.listen(PORT, () => console.log('Sortir AI backend → http://localhost:' + PORT));
+
